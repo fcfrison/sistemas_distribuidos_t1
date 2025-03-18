@@ -15,7 +15,7 @@ TEST_EXECUTABLE := tests
 
 # Source files
 SRC_FILES := $(wildcard $(SRC)/*.c) $(wildcard $(SRC)/$(PP2PLINK)/*.c)
-TEST_FILES := $(TESTS)/test_chan.c
+TEST_FILES := $(TESTS)/test_p2p.c
 
 # Main target
 all: $(BIN)/$(EXECUTABLE)

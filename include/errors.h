@@ -8,7 +8,7 @@ typedef struct PthreadMutexLockErrorInfo PthreadMutexLockErrorInfo;
 typedef enum {
     ERROR_RECOVERABLE,
     ERROR_FATAL
-} ErrorCategory;
+}ErrorCategory;
 
 struct SendErrorInfo{
     int error_code;

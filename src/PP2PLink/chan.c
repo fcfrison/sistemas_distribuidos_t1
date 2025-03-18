@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include "../include/chan.h"
+#include "../include/errors.h"
 //--------------------------------------------------------//
 //---------------- CHANNEL IMPLEMENTATION ----------------//
 //--------------------------------------------------------//

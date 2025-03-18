@@ -12,20 +12,6 @@ typedef struct{
     sem_t* full_slots;
 }chan;
 
-typedef enum {
-    ERROR_RECOVERABLE,
-    ERROR_FATAL
-} ErrorCategory;
-
-typedef struct{
-    int error_code;
-    ErrorCategory category;
-}SendErrorInfo;
-
-typedef struct {
-    int error_code;
-    ErrorCategory category;
-}PthreadMutexLockErrorInfo;
 chan*  start_chan(unsigned int size, void** queue);
 void** remove_chan(chan* ch);
 void*  receive_data(chan* ch);
