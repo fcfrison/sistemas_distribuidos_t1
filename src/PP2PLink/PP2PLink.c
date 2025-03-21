@@ -193,6 +193,9 @@ format_rmt_add(const char* ip_str, const char* port_str){
 }
 void
 start(PP2PLink* p2p, char* address){
+    //TODO: it's necessary to deal with two threads
+    // the first thread is the listener thread
+    // the second is the sender thread
     int server_fd = get_server_sock(address, 50);
     if(server_fd==-1){
         fprintf(stderr,"Error: listening socket couldn't be created");
@@ -241,18 +244,22 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     int*  fd   = NULL;
     char* ip   = NULL; 
     char* port = NULL;
+    int socket_fd;
     KeyValuePair* kvp = NULL;
     unsigned int max_retries = 1, count_retries = -1;
     int err;
     if(!req){
         return;
     };
-    char* key          = req->to;
-    char* message      = req->message;
+    char* key      = req->to;
+    char* message  = req->message;
     if(!key || !message){
         if(message){
             free(message);
-        }
+        };
+        if(key){
+            free(key);
+        };
         free(req);
         return;
     };
@@ -261,11 +268,10 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     from_key_extract_ip_port(&ip, &port, key, ":");
     char msg_size[4] = {0};
     sprintf(msg_size, "%d", strlen(req->message));
-    //TODO: check if all the dynamic allocated memory objects are freed in case of error
     while(count_retries<max_retries){
         kvp = get(p2p->map,(void*)key, compare_keys);
         if(!kvp){
-            if(!cache_connection(key, fd, port, ip, &kvp,p2p->map)){
+            if(!cache_connection(key, &fd, port, ip, &kvp,p2p->map)){
                 free(ip);
                 free(port);
                 free(req->message);
@@ -274,14 +280,14 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
                 return;
             }
         };
-        *fd = *((int*)kvp->value);
-        err = write(*fd, msg_size, 4);
+        socket_fd = *((int*)kvp->value);
+        err = write(socket_fd, msg_size, 4);
         if(err<0){
             count_retries++;
-            handle_write_error(fd, key, p2p->map);
+            handle_write_error(socket_fd, key, p2p->map);
             continue;
         };
-        err = write(*fd,message,strlen(req->message));
+        err = write(socket_fd,message,strlen(req->message));
         if(err<0){
             count_retries++;
             handle_write_error(fd, key, p2p->map);
@@ -289,34 +295,38 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
         };
         break;
     };
-    //TODO: here, a clean up must be done. All the temporary object must be
-    // freed
+    free(req->message);
+    free(req->to);
+    free(req);
+    free(ip);
+    free(port);
+    free(kvp);
 };
 void
-handle_write_error(int* fd, const char* key, const SimpleMap* map){
-    
-    close(*fd);
+handle_write_error(int fd, const char* key, const SimpleMap* map){
+    close(fd);
     KeyValuePair rmv_pair;
     remove_key(map, key, compare_keys, &rmv_pair);
     free(rmv_pair.key);
     free(rmv_pair.value);
     return;
-}
+};
 
 char
-cache_connection(char* key,
-                int*   fd,
-                char*  port,
-                char*  ip,
+cache_connection(const char* key,
+                int**   fd,
+                const char*  port,
+                const char*  ip,
                 KeyValuePair** kvp,
-                SimpleMap* sm){
+                const SimpleMap* sm){
     if(!dial(atoi(port), ip, fd)){
         return 0;
     };
     char* key_cpy = (char*)calloc(strlen(key)+1,sizeof(char));
     strcpy(key_cpy,key);
-    *kvp = create_key_val_pair((void*)key_cpy,(void*)fd);
+    *kvp = create_key_val_pair((void*)key_cpy,(void*)*fd);
     set(sm,kvp,compare_keys);
+    *fd=NULL;
     return 1;
 };
 void*
@@ -343,6 +353,10 @@ from_key_extract_ip_port(char** ip,
 int
 dial(int* port, char* address, int** sockfd){
     *sockfd = (int*)calloc(1,sizeof(int));
+    if(!(*sockfd)){
+        *sockfd = NULL;
+        return 0;
+    }
     struct sockaddr_in servaddr;
     **sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (**sockfd <0) {
