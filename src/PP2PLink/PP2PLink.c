@@ -122,20 +122,19 @@ listen_to_clnt(void* args){
     int fd = _args->fd;
     PP2PLink* p2p = _args->p2p;
     unsigned char n_bytes_msg_l = 4;
-    char msg_len_buf[n_bytes_msg_l+1];
+    char msg_msg_size[n_bytes_msg_l+1];
     ssize_t rtn;
     char* ip_str = NULL, *port_str = NULL;
-
     while(1){
-        memset(msg_len_buf,0,n_bytes_msg_l+1);
-        rtn = recv(fd, msg_len_buf, n_bytes_msg_l, MSG_WAITALL);
+        memset(msg_msg_size,0,n_bytes_msg_l+1);
+        rtn = recv(fd, msg_msg_size, n_bytes_msg_l, MSG_WAITALL);
         if(rtn<0){
             perror("Error: ");
             free(_args);
             close(fd);
             return NULL;
         };
-        int msg_len = from_str_to_int(msg_len_buf);
+        int msg_len = from_str_to_int(msg_msg_size);
         if(msg_len<1){
             fprintf(stderr,"Error: invalid message length.");
             return NULL;
@@ -186,6 +185,7 @@ init_p2p_ind(char* from, char* message){
 
 char*
 format_rmt_add(const char* ip_str, const char* port_str){
+    if(!ip_str||!port_str) return NULL;
     int len = strlen(ip_str) + strlen(port_str) + 2;
     char* fmt_str = (char*)calloc(len,sizeof(char));
     snprintf(fmt_str,len,"%s:%s",ip_str,port_str);
@@ -208,14 +208,12 @@ start(PP2PLink* p2p, char* address){
             close(client_fd);
             continue;
         };
-        ListenSockArgs* args = (ListenSockArgs*)calloc(1,sizeof(ListenSockArgs));
+        ListenSockArgs* args = init_listen_sock_args(client_fd, p2p);
         if(!args){
             free(conn_thread);
             close(client_fd);
             continue;
         };
-        args->fd = client_fd;
-        args->p2p = p2p;
         if(pthread_create(conn_thread,NULL,listen_to_clnt,(void*)args)!=0){
             free(args);
             free(conn_thread);
@@ -227,4 +225,78 @@ start(PP2PLink* p2p, char* address){
         pthread_detach(*conn_thread);
         free(conn_thread);
     }
+};
+ListenSockArgs*
+init_listen_sock_args(int client_fd, PP2PLink* p2p){
+    if(!p2p||client_fd<0) return NULL;
+    ListenSockArgs* args = (ListenSockArgs*)calloc(1,sizeof(ListenSockArgs));
+    if(!args) return NULL;
+    args->fd  = client_fd;
+    args->p2p = p2p;
+    return args;
+}
+
+void
+Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
+    if(!req->to) return;
+    KeyValuePair* kvp;
+    char* key = req->to;
+    kvp = get(p2p->map,(void*)key, compare_keys);
+    if(!kvp){
+        int* fd;
+        char* ip, *port;
+        fd = (int*)calloc(1,sizeof(int));
+        from_key_extract_ip_port(&ip, &port, req, ":");
+        if(dial(atoi(port), ip, fd)<0){
+            free(fd);
+            return;
+        };
+        kvp = create_key_val_pair((void*)key,(void*)fd);
+        set(p2p->map,kvp,compare_keys);
+    };
+    char msg_size[4] = {0};
+    sprintf(msg_size, "%d", strlen(req->message));
+    int err = write(*((int*)kvp->value), msg_size, 4);
+    if(err>0){
+        err = write(*((int*)kvp->value),req->message,strlen(req->message));
+        if(err>0) return;
+    };
+};
+void
+send_msg(){
+    //TODO: continue from here
+}
+void*
+compare_keys(const void* key_a, const void* key_b){
+    if(!key_a||!key_b) return NULL;
+    return strcmp((char*)key_a, (char*)key_b)==0?key_a:NULL;
+};
+void
+from_key_extract_ip_port(char** ip,
+                         char** port,
+                         const PP2PLink_Req_Message* req,
+                         const char* delim){
+    size_t len = strlen(req->message);
+    char* msg_cp = (char*)calloc(len+1,sizeof(char));
+    strcpy(msg_cp,req->message);
+    strtok(msg_cp,delim);
+    *ip = (char*)calloc(strlen(msg_cp)+1,sizeof(char));
+    strtok(NULL,delim);
+    *port = (char*)calloc(strlen(msg_cp)+1,sizeof(char));
+    free(msg_cp);
+    return;
+};
+
+int
+dial(int* port, char* address, int* sockfd){
+    struct sockaddr_in servaddr;
+    *sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (*sockfd <0) {
+        return *sockfd;
+    };
+    memset(&servaddr,0,sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = inet_addr(address);
+    servaddr.sin_port = htons(port);
+    return connect(*sockfd, &servaddr, sizeof(servaddr));
 }

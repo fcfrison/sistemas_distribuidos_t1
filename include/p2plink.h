@@ -32,4 +32,5 @@ void* listen_to_clnt(void* args);
 PP2PLink_Ind_Message* init_p2p_ind(char* from, char* message);
 char* format_rmt_add(const char* ip_str, const char* port_str);
 void start(PP2PLink* p2p, char* address);
+ListenSockArgs* init_listen_sock_args(int client_fd, PP2PLink* p2p);
 #endif

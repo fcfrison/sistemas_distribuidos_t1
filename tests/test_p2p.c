@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <../include/p2plink.h>
-
+// These unit test were implemented with the 
 // Test 1: Valid positive number
 void test_valid_positive_number() {
     char str[] = "12345";
@@ -145,6 +145,85 @@ void test_invalid_socket_fd() {
     assert(rtn==-1);
     printf("Test 2 Passed: Invalid socket file descriptor\n");
 };
+// Test 1: Valid IP and port
+void test_valid_ip_and_port() {
+    const char* ip = "192.168.1.1";
+    const char* port = "8080";
+    char* result = format_rmt_add(ip, port);
+    assert(strcmp(result, "192.168.1.1:8080") == 0); // Expected: "192.168.1.1:8080"
+    free(result);
+    printf("Test 1 Passed: Valid IP and port\n");
+};
+// Test 2: Empty IP string
+void test_empty_ip_string() {
+    const char* ip = "";
+    const char* port = "8080";
+    char* result = format_rmt_add(ip, port);
+    assert(strcmp(result, ":8080") == 0); // Expected: ":8080"
+    free(result);
+    printf("Test 2 Passed: Empty IP string\n");
+};
+
+// Test 3: Empty port string
+void test_empty_port_string() {
+    const char* ip = "192.168.1.1";
+    const char* port = "";
+    char* result = format_rmt_add(ip, port);
+    assert(strcmp(result, "192.168.1.1:") == 0); // Expected: "192.168.1.1:"
+    free(result);
+    printf("Test 3 Passed: Empty port string\n");
+};
+// Test 4: Both IP and port strings empty
+void test_both_ip_and_port_empty() {
+    const char* ip = "";
+    const char* port = "";
+    char* result = format_rmt_add(ip, port);
+    assert(strcmp(result, ":") == 0); // Expected: ":"
+    free(result);
+    printf("Test 4 Passed: Both IP and port strings empty\n");
+};
+// Test 5: IP with leading/trailing spaces
+void test_ip_with_spaces() {
+    const char* ip = "  192.168.1.1  ";
+    const char* port = "8080";
+    char* result = format_rmt_add(ip, port);
+    assert(strcmp(result, "  192.168.1.1  :8080") == 0); // Expected: "  192.168.1.1  :8080"
+    free(result);
+    printf("Test 5 Passed: IP with leading/trailing spaces\n");
+};
+// Test 6: Port with leading/trailing spaces
+void test_port_with_spaces() {
+    const char* ip = "192.168.1.1";
+    const char* port = "  8080  ";
+    char* result = format_rmt_add(ip, port);
+    assert(strcmp(result, "192.168.1.1:  8080  ") == 0); // Expected: "192.168.1.1:  8080  "
+    free(result);
+    printf("Test 6 Passed: Port with leading/trailing spaces\n");
+}
+// Test 1: Valid client-server interaction
+void test_valid_client_server_interaction(){
+    int sockfd[2];//[0]-server [1]-client
+    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sockfd) == 0);//using AF_UNIX is a good call
+    PP2PLink* p2p = new_p2p_link(1);
+    pthread_t thread;
+    ListenSockArgs* args = init_listen_sock_args(sockfd[0], p2p);
+    assert(pthread_create(&thread, NULL, listen_to_clnt, args) == 0);
+    // Simulate a client sending a message
+    const char* message = "Hello, server!";
+    char msg_len[5];
+    snprintf(msg_len, sizeof(msg_len), "%04d", (int)strlen(message));
+    write(sockfd[1], msg_len, 4); // Send message length
+    write(sockfd[1], message, strlen(message)); // Send message
+    PP2PLink_Ind_Message* msg = receive_data(p2p->ind);
+    assert(strcmp("Hello, server!",msg->message)==0);
+    assert(strcmp("0.0.0.0:0",msg->from)==0);
+    // Clean up
+    close(sockfd[0]);
+    close(sockfd[1]);
+    pthread_cancel(thread); // Stop the listener thread
+    pthread_join(thread, NULL);
+    printf("\nTest 1 Passed: Valid client-server interaction\n");
+};
 int main() {
     test_valid_positive_number();
     test_valid_negative_number();
@@ -155,6 +234,16 @@ int main() {
 
     test_valid_ipv4_and_port();
     test_invalid_socket_fd();
+
+    test_valid_ip_and_port();
+    test_empty_ip_string();
+    test_empty_port_string();
+    test_both_ip_and_port_empty();
+    test_ip_with_spaces();
+    test_port_with_spaces();
+
+
+    test_valid_client_server_interaction();
     printf("All tests passed!\n");
     return 0;
 }
