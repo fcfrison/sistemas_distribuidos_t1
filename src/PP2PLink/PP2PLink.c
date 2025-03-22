@@ -17,7 +17,10 @@
 #include "../include/simple_map.h"
 #include "../include/errors.h"
 #include "../include/p2plink.h"
-
+#define HANDLE_NULL_ALLOC(ptr, cleanup_label) \
+    if (!(ptr)) { \
+        goto cleanup_label; \
+    }
 
 PP2PLink*
 new_p2p_link(unsigned int max_size){
@@ -73,8 +76,6 @@ accept_client(int server_fd){
     client_addr_len = sizeof(client_addr);
     return accept(server_fd, (struct sockaddr*)&client_addr, &client_addr_len);
 };
-
-
 
 int
 from_str_to_int(char* str){
@@ -182,7 +183,6 @@ init_p2p_ind(char* from, char* message){
     p2p_ind->message = message;
     return p2p_ind;
 }
-
 char*
 format_rmt_add(const char* ip_str, const char* port_str){
     if(!ip_str||!port_str) return NULL;
@@ -193,10 +193,42 @@ format_rmt_add(const char* ip_str, const char* port_str){
 }
 void
 start(PP2PLink* p2p, char* address){
-    //TODO: it's necessary to deal with two threads
-    // the first thread is the listener thread
-    // the second is the sender thread
-    int server_fd = get_server_sock(address, 50);
+    ListenerArgs* l_args =calloc(1,sizeof(ListenerArgs));
+    l_args->maxpending = 50;
+    l_args->p2p        = p2p;
+    l_args->port       = address;
+    pthread_t* listener_th = (pthread_t*)calloc(1,sizeof(pthread_t));
+    if(pthread_create(listener_th, NULL, Listener, l_args)!=0){
+        free(listener_th);
+        fprintf(stderr, "Error: failed to create thread\n");
+        exit(ERROR_FATAL);
+    };
+    pthread_t* sender_th = (pthread_t*)calloc(1,sizeof(pthread_t));
+    if(pthread_create(sender_th, NULL, Sender, p2p)!=0){
+        free(sender_th);
+        fprintf(stderr, "Error: failed to create thread\n");
+        exit(ERROR_FATAL);
+    };
+    free(listener_th);
+    free(sender_th);
+    return;
+};
+void*
+Sender(void* args){
+    PP2PLink* p2p = (PP2PLink*)args;
+    while(1){
+        PP2PLink_Req_Message* req = receive_data(p2p->req);
+        Send(req, p2p);
+    };
+}
+void*
+Listener(void* args){
+    ListenerArgs* lstn_args = (void*) args;
+    PP2PLink* p2p = lstn_args->p2p;
+    char* port    = lstn_args->port;
+    int maxpending = lstn_args->maxpending;
+    free(lstn_args);
+    int server_fd = get_server_sock(port, maxpending);
     if(server_fd==-1){
         fprintf(stderr,"Error: listening socket couldn't be created");
         exit(ERROR_FATAL);
@@ -211,7 +243,7 @@ start(PP2PLink* p2p, char* address){
             close(client_fd);
             continue;
         };
-        ListenSockArgs* args = init_listen_sock_args(client_fd, p2p);
+        ListenSockArgs* args = init_listen_sock_args(client_fd,p2p);
         if(!args){
             free(conn_thread);
             close(client_fd);
@@ -227,8 +259,8 @@ start(PP2PLink* p2p, char* address){
         // a thread criada nao terá join
         pthread_detach(*conn_thread);
         free(conn_thread);
-    }
-};
+    };
+}
 ListenSockArgs*
 init_listen_sock_args(int client_fd, PP2PLink* p2p){
     if(!p2p||client_fd<0) return NULL;
@@ -238,7 +270,6 @@ init_listen_sock_args(int client_fd, PP2PLink* p2p){
     args->p2p = p2p;
     return args;
 }
-
 void
 Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     int*  fd   = NULL;
@@ -253,21 +284,14 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     };
     char* key      = req->to;
     char* message  = req->message;
-    if(!key || !message){
-        if(message){
-            free(message);
-        };
-        if(key){
-            free(key);
-        };
-        free(req);
-        return;
-    };
-    size_t key_len     = strlen(key);
-    size_t message_len = strlen(message);
+    HANDLE_NULL_ALLOC(key, cleanup_key_or_msg);
+    HANDLE_NULL_ALLOC(message, cleanup_key_or_msg);
+    int message_len = (int)strlen(message);
     from_key_extract_ip_port(&ip, &port, key, ":");
+    HANDLE_NULL_ALLOC(ip, cleanup_key_or_msg);
+    HANDLE_NULL_ALLOC(port, cleanup_key_or_msg);
     char msg_size[4] = {0};
-    sprintf(msg_size, "%d", strlen(req->message));
+    sprintf(msg_size, "%d", message_len);
     while(count_retries<max_retries){
         kvp = get(p2p->map,(void*)key, compare_keys);
         if(!kvp){
@@ -287,10 +311,10 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
             handle_write_error(socket_fd, key, p2p->map);
             continue;
         };
-        err = write(socket_fd,message,strlen(req->message));
+        err = write(socket_fd,message,message_len);
         if(err<0){
             count_retries++;
-            handle_write_error(fd, key, p2p->map);
+            handle_write_error(socket_fd, key, p2p->map);
             continue;
         };
         break;
@@ -301,9 +325,17 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     free(ip);
     free(port);
     free(kvp);
+    return;
+
+    cleanup_key_or_msg:
+        if(message) free(message);
+        if(key)     free(key);
+        if(req)     free(req);
+        return;
+
 };
 void
-handle_write_error(int fd, const char* key, const SimpleMap* map){
+handle_write_error(int fd, const char* key, SimpleMap* map){
     close(fd);
     KeyValuePair rmv_pair;
     remove_key(map, key, compare_keys, &rmv_pair);
@@ -311,25 +343,24 @@ handle_write_error(int fd, const char* key, const SimpleMap* map){
     free(rmv_pair.value);
     return;
 };
-
 char
-cache_connection(const char* key,
-                int**   fd,
-                const char*  port,
-                const char*  ip,
+cache_connection(const char*   key,
+                int**          fd,
+                const char*    port,
+                const char*    ip,
                 KeyValuePair** kvp,
-                const SimpleMap* sm){
+                SimpleMap*     sm){
     if(!dial(atoi(port), ip, fd)){
         return 0;
     };
     char* key_cpy = (char*)calloc(strlen(key)+1,sizeof(char));
     strcpy(key_cpy,key);
     *kvp = create_key_val_pair((void*)key_cpy,(void*)*fd);
-    set(sm,kvp,compare_keys);
+    set(sm,*kvp,compare_keys);
     *fd=NULL;
     return 1;
 };
-void*
+const void*
 compare_keys(const void* key_a, const void* key_b){
     if(!key_a||!key_b) return NULL;
     return strcmp((char*)key_a, (char*)key_b)==0?key_a:NULL;
@@ -339,19 +370,48 @@ from_key_extract_ip_port(char** ip,
                          char** port,
                          const char* to,
                          const char* delim){
+    if(!ip||!port||!to||!delim){
+        *ip=NULL;
+        *port=NULL;
+        return;
+    }
     size_t len = strlen(to);
+    char* next=NULL;
+    HANDLE_NULL_ALLOC(len, cleanup_none);
     char* msg_cp = (char*)calloc(len+1,sizeof(char));
+    HANDLE_NULL_ALLOC(msg_cp, cleanup_none);
     strcpy(msg_cp,to);
-    strtok(msg_cp,delim);
-    *ip = (char*)calloc(strlen(msg_cp)+1,sizeof(char));
-    strtok(NULL,delim);
-    *port = (char*)calloc(strlen(msg_cp)+1,sizeof(char));
+    next = strtok(msg_cp,delim);
+    HANDLE_NULL_ALLOC(next, cleanup_msg);
+    *ip = (char*)calloc(strlen(next)+1,sizeof(char));
+    HANDLE_NULL_ALLOC(*ip, cleanup_msg);
+    strcpy(*ip,next);
+    next = strtok(NULL,delim);
+    HANDLE_NULL_ALLOC(next, cleanup_msg_ip);
+    *port = (char*)calloc(strlen(next)+1,sizeof(char));
+    HANDLE_NULL_ALLOC(*port, cleanup_msg_ip);
+    strcpy(*port,next);
     free(msg_cp);
     return;
-};
 
-int
-dial(int* port, char* address, int** sockfd){
+    cleanup_none:
+        *ip = NULL;
+        *port = NULL;
+        return;
+    cleanup_msg:
+        if(msg_cp) free(msg_cp);
+        *ip = NULL;
+        *port = NULL;
+        return;
+    cleanup_msg_ip:
+        if(msg_cp) free(msg_cp);
+        if(*ip)    free(*ip);
+        *ip = NULL;
+        *port = NULL;
+        return;
+};
+unsigned char
+dial(const int port, const char* ip, int** sockfd){
     *sockfd = (int*)calloc(1,sizeof(int));
     if(!(*sockfd)){
         *sockfd = NULL;
@@ -366,13 +426,13 @@ dial(int* port, char* address, int** sockfd){
     };
     memset(&servaddr,0,sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(address);
+    servaddr.sin_addr.s_addr = inet_addr(ip);
     servaddr.sin_port = htons(port);
-    if(connect(**sockfd, &servaddr, sizeof(servaddr))<0){
+    if(connect(**sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr))<0){
         close(**sockfd);
         free(*sockfd);
         *sockfd = NULL;
         return 0;
     };
     return 1;
-}
+};

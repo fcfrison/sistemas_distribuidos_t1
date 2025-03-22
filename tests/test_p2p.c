@@ -9,6 +9,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <../include/p2plink.h>
+// These unit tests were generated with the help of Deep Seek AI
+
 // These unit test were implemented with the 
 // Test 1: Valid positive number
 void test_valid_positive_number() {
@@ -224,6 +226,206 @@ void test_valid_client_server_interaction(){
     pthread_join(thread, NULL);
     printf("\nTest 1 Passed: Valid client-server interaction\n");
 };
+
+// Test 1: Successful connection to a valid server
+void test_successful_connection() {
+    int port = 9090;
+    char address[] = "127.0.0.1";
+    int* sockfd = NULL;
+
+    // Start a mock server
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    assert(server_fd >= 0);
+    int val = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(address);
+    server_addr.sin_port = htons(port);
+
+    assert(bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == 0);
+    assert(listen(server_fd, 1) == 0);
+
+    // Test the dial function
+    unsigned char result = dial(port, address, &sockfd);
+    assert(result == 1); // Expected: Success
+    assert(sockfd != NULL); // sockfd should be allocated
+    assert(*sockfd >= 0); // Socket descriptor should be valid
+
+    // Clean up
+    close(*sockfd);
+    free(sockfd);
+    close(server_fd);
+    printf("Test 1 Passed: Successful connection to a valid server\n");
+};
+// Test 2: Invalid address (connection fails)
+void test_invalid_address() {
+    int port = 8080;
+    char address[] = "invalid.address";
+    int* sockfd = NULL;
+
+    // Test the dial function
+    unsigned char result = dial(port, address, &sockfd);
+    assert(result == 0); // Expected: Failure
+    assert(sockfd == NULL); // sockfd should remain NULL
+
+    printf("Test 2 Passed: Invalid address (connection fails)\n");
+};
+// Test 3: Invalid port (connection fails)
+void test_invalid_port() {
+    int port = -1; // Invalid port
+    char address[] = "127.0.0.1";
+    int* sockfd = NULL;
+
+    // Test the dial function
+    unsigned char result = dial(port, address, &sockfd);
+    assert(result == 0); // Expected: Failure
+    assert(sockfd == NULL); // sockfd should remain NULL
+
+    printf("Test 3 Passed: Invalid port (connection fails)\n");
+};
+
+// Test 1: Valid IP and port extraction
+void test_valid_ip_port_extraction() {
+    char* ip = NULL;
+    char* port = NULL;
+    const char* to = "127.0.0.1:12345";
+    const char* delim = ":";
+
+    from_key_extract_ip_port(&ip, &port, to, delim);
+
+    assert(ip != NULL); // IP should be allocated
+    assert(port != NULL); // Port should be allocated
+    assert(strcmp(ip, "127.0.0.1") == 0); // Expected IP: 127.0.0.1
+    assert(strcmp(port, "12345") == 0); // Expected port: 12345
+
+    free(ip);
+    free(port);
+    printf("Test 1 Passed: Valid IP and port extraction\n");
+};
+// Test 2: Missing port in the input string
+void test_missing_port() {
+    char* ip = NULL;
+    char* port = NULL;
+    const char* to = "127.0.0.1";
+    const char* delim = ":";
+
+    from_key_extract_ip_port(&ip, &port, to, delim);
+
+    assert(ip == NULL);
+    assert(port == NULL);
+    printf("Test 2 Passed: Missing port in the input string\n");
+}
+// Test 3: Missing IP in the input string
+void test_missing_ip() {
+    char* ip = NULL;
+    char* port = NULL;
+    const char* to = ":12345";
+    const char* delim = ":";
+
+    from_key_extract_ip_port(&ip, &port, to, delim);
+
+    assert(ip == NULL); // IP should be allocated
+    assert(port == NULL); // Port should be allocated
+
+    free(ip);
+    free(port);
+    printf("Test 3 Passed: Missing IP in the input string\n");
+};
+// Test 4: Empty input string
+void test_empty_input_string() {
+    char* ip = NULL;
+    char* port = NULL;
+    const char* to = "";
+    const char* delim = ":";
+
+    from_key_extract_ip_port(&ip, &port, to, delim);
+
+    assert(ip == NULL);
+    assert(port == NULL);
+    printf("Test 4 Passed: Empty input string\n");
+    return;
+}
+// Test 5: Custom delimiter
+void test_custom_delimiter() {
+    char* ip = NULL;
+    char* port = NULL;
+    const char* to = "127.0.0.1-12345";
+    const char* delim = "-";
+
+    from_key_extract_ip_port(&ip, &port, to, delim);
+
+    assert(ip != NULL); // IP should be allocated
+    assert(port != NULL); // Port should be allocated
+    assert(strcmp(ip, "127.0.0.1") == 0); // Expected IP: 127.0.0.1
+    assert(strcmp(port, "12345") == 0); // Expected port: 12345
+
+    free(ip);
+    free(port);
+    printf("Test 5 Passed: Custom delimiter\n");
+    return;
+};
+// Test 1: Keys are equal
+void test_keys_are_equal() {
+    const char* key_a = "test_key";
+    const char* key_b = "test_key";
+
+    const void* result = compare_keys(key_a, key_b);
+    assert(result == key_a); // Expected: key_a (keys are equal)
+    printf("Test 1 Passed: Keys are equal\n");
+}
+
+// Test 2: Keys are not equal
+void test_keys_are_not_equal() {
+    const char* key_a = "test_key";
+    const char* key_b = "different_key";
+
+    const void* result = compare_keys(key_a, key_b);
+    assert(result == NULL); // Expected: NULL (keys are not equal)
+    printf("Test 2 Passed: Keys are not equal\n");
+}
+
+// Test 3: One key is NULL
+void test_one_key_is_null() {
+    const char* key_a = "test_key";
+    const char* key_b = NULL;
+
+    const void* result = compare_keys(key_a, key_b);
+    assert(result == NULL); // Expected: NULL (one key is NULL)
+    printf("Test 3 Passed: One key is NULL\n");
+}
+
+// Test 4: Both keys are NULL
+void test_both_keys_are_null() {
+    const char* key_a = NULL;
+    const char* key_b = NULL;
+
+    const void* result = compare_keys(key_a, key_b);
+    assert(result == NULL); // Expected: NULL (both keys are NULL)
+    printf("Test 4 Passed: Both keys are NULL\n");
+}
+
+// Test 5: Empty strings as keys
+void test_empty_strings_as_keys() {
+    const char* key_a = "";
+    const char* key_b = "";
+
+    const void* result = compare_keys(key_a, key_b);
+    assert(result == key_a); // Expected: key_a (empty strings are equal)
+    printf("Test 5 Passed: Empty strings as keys\n");
+}
+
+// Test 6: One key is an empty string
+void test_one_key_is_empty_string() {
+    char* key_a = "test_key";
+    char* key_b = "";
+
+    const void* result = compare_keys(key_a, key_b);
+    assert(result == NULL); // Expected: NULL (one key is an empty string)
+    printf("Test 6 Passed: One key is an empty string\n");
+};
 int main() {
     test_valid_positive_number();
     test_valid_negative_number();
@@ -245,5 +447,22 @@ int main() {
 
     test_valid_client_server_interaction();
     printf("All tests passed!\n");
+
+    test_successful_connection();
+    test_invalid_address();
+    test_invalid_port();
+
+    test_valid_ip_port_extraction();
+    test_missing_port();
+    test_missing_ip();
+    test_empty_input_string();
+    test_custom_delimiter();
+
+    test_keys_are_equal();
+    test_keys_are_not_equal();
+    test_one_key_is_null();
+    test_both_keys_are_null();
+    test_empty_strings_as_keys();
+    test_one_key_is_empty_string();
     return 0;
 }

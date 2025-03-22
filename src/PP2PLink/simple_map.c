@@ -12,8 +12,8 @@ create_key_val_pair(void* key, void* value){
 
 int
 remove_key(SimpleMap* sm,
-           void* key,
-           void*(cmp_fptr)(const void* a, const void* b),
+           const void* key,
+           const void*(cmp_fptr)(const void* a, const void* b),
            KeyValuePair* rmv_pair){
     if(!sm       || !key || !cmp_fptr || !rmv_pair ||
        !sm->keys || !sm->values){
@@ -119,31 +119,9 @@ __upgrade(SimpleMap* sm, int pos, KeyValuePair* key_par){
 }
 
 
-int
-set(SimpleMap* sm, KeyValuePair* key_par, void*(cmp_fptr)(const void* a, const void* b)){
-    if(!sm || !key_par || !key_par->key){
-        return ERROR_SET_SM_RTN;
-    }
-    int pos = __find(sm, key_par->key,cmp_fptr);
-    switch (pos){
-        case FIND_KEY_ERROR:
-        case KEY_ARR_ERROR:
-            return ERROR_SET_SM_RTN;
-        case KEY_NOT_FOUND:
-            if(!__set(sm, key_par)){
-                return ERROR_SET_SM_RTN;
-            }
-            return SUCESS_SET;
-        default:
-            if(!__upgrade(sm, pos, key_par)){
-                return ERROR_SET_SM_RTN;
-            }
-            return SUCESS_UPGRADE;
-    }
 
-}
 KeyValuePair*
-get(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b)){
+get(SimpleMap* sm, void* key, const void*(cmp_fptr)(const void* a, const void* b)){
     if(!sm || !key || !cmp_fptr ){
         return NULL;
     }
@@ -162,7 +140,7 @@ get(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b)){
     }
 }
 int
-__find(const SimpleMap* sm, const void* key, void*(cmp_fptr)(const void* a, const void* b)){
+__find(const SimpleMap* sm, const void* key, const void*(cmp_fptr)(const void* a, const void* b)){
     int i = 0;
     if(!sm || !key || !cmp_fptr ||
        !sm->keys){
@@ -228,7 +206,7 @@ delete_map(SimpleMap* sm, void* (*clean_up)(void*, void*)){
     return 1;
 };
 int
-set(SimpleMap* sm, KeyValuePair* key_par, void*(cmp_fptr)(const void* a, const void* b)){
+set(SimpleMap* sm, KeyValuePair* key_par, const void*(cmp_fptr)(const void* a, const void* b)){
     if(!sm || !key_par || !key_par->key){
         return ERROR_SET_SM_RTN;
     }
@@ -247,6 +225,5 @@ set(SimpleMap* sm, KeyValuePair* key_par, void*(cmp_fptr)(const void* a, const v
                 return ERROR_SET_SM_RTN;
             }
             return SUCESS_UPGRADE;
-    }
-
-}
+    };
+};
