@@ -209,7 +209,7 @@ void test_valid_client_server_interaction(){
     PP2PLink* p2p = new_p2p_link(1);
     pthread_t thread;
     ListenSockArgs* args = init_listen_sock_args(sockfd[0], p2p);
-    assert(pthread_create(&thread, NULL, listen_to_clnt, args) == 0);
+    assert(pthread_create(&thread, NULL, listen_to_clt, args) == 0);
     // Simulate a client sending a message
     const char* message = "Hello, server!";
     char msg_len[5];
@@ -426,6 +426,37 @@ void test_one_key_is_empty_string() {
     assert(result == NULL); // Expected: NULL (one key is an empty string)
     printf("Test 6 Passed: One key is an empty string\n");
 };
+
+// Test 1: Successful caching of a connection
+void test_successful_caching() {
+    char* key = "test_key";
+    int fd = 123; // Mock socket file descriptor
+    struct KeyValuePair* kvp = NULL;
+    struct SimpleMap* sm = create_simple_map();
+    cache_connection(key, &fd, &kvp, sm);
+    KeyValuePair* rtn = get(sm,key,compare_keys);
+    assert(strcmp((char*)rtn->key,key)==0);
+    assert(kvp != NULL); // kvp should be allocated
+    free(kvp->key);
+    free(kvp);
+    free(sm);
+    printf("Test 1 Passed: Successful caching of a connection\n");
+};
+// Test 2: NULL key
+void test_null_key() {
+    const char* key = NULL;
+    int fd = 123;
+    struct KeyValuePair* kvp = NULL;
+    struct SimpleMap* sm = create_simple_map();
+
+    cache_connection(key, &fd, &kvp, sm);
+
+    assert(kvp == NULL); // kvp should remain NULL
+    assert(sm->top == -1); // No entry should be added to the map
+    free(sm);
+    printf("Test 2 Passed: NULL key\n");
+};
+
 int main() {
     test_valid_positive_number();
     test_valid_negative_number();
@@ -464,5 +495,8 @@ int main() {
     test_both_keys_are_null();
     test_empty_strings_as_keys();
     test_one_key_is_empty_string();
+
+    test_successful_caching();
+    test_null_key();
     return 0;
 }

@@ -117,7 +117,7 @@ get_peer_info_ipv4(const int sockfd, char** ip_str, char** port_str){
     return 1;
 };
 void*
-listen_to_clnt(void* args){
+listen_to_clt(void* args){
     ListenSockArgs* _args = (ListenSockArgs*) args;
     if(!_args||_args->fd<0 || !_args->p2p) return NULL;
     int fd = _args->fd;
@@ -222,8 +222,8 @@ Sender(void* args){
     };
 }
 void*
-Listener(void* args){
-    ListenerArgs* lstn_args = (void*) args;
+Listener(void* l_args){
+    ListenerArgs* lstn_args = (void*)l_args;
     PP2PLink* p2p = lstn_args->p2p;
     char* port    = lstn_args->port;
     int maxpending = lstn_args->maxpending;
@@ -249,7 +249,7 @@ Listener(void* args){
             close(client_fd);
             continue;
         };
-        if(pthread_create(conn_thread,NULL,listen_to_clnt,(void*)args)!=0){
+        if(pthread_create(conn_thread,NULL,listen_to_clt,(void*)args)!=0){
             free(args);
             free(conn_thread);
             close(client_fd);
@@ -270,6 +270,8 @@ init_listen_sock_args(int client_fd, PP2PLink* p2p){
     args->p2p = p2p;
     return args;
 }
+
+//TODO: write test for the "Send" function
 void
 Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     int*  fd   = NULL;
@@ -284,27 +286,23 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     };
     char* key      = req->to;
     char* message  = req->message;
-    HANDLE_NULL_ALLOC(key, cleanup_key_or_msg);
-    HANDLE_NULL_ALLOC(message, cleanup_key_or_msg);
+    HANDLE_NULL_ALLOC(key, cleanup_req_ip_port_kvp);
+    HANDLE_NULL_ALLOC(message, cleanup_req_ip_port_kvp);
     int message_len = (int)strlen(message);
     from_key_extract_ip_port(&ip, &port, key, ":");
-    HANDLE_NULL_ALLOC(ip, cleanup_key_or_msg);
-    HANDLE_NULL_ALLOC(port, cleanup_key_or_msg);
+    HANDLE_NULL_ALLOC(ip, cleanup_req_ip_port_kvp);
+    HANDLE_NULL_ALLOC(port, cleanup_req_ip_port_kvp);
     char msg_size[4] = {0};
     sprintf(msg_size, "%d", message_len);
     while(count_retries<max_retries){
         kvp = get(p2p->map,(void*)key, compare_keys);
         if(!kvp){
-            if(!cache_connection(key, &fd, port, ip, &kvp,p2p->map)){
-                free(ip);
-                free(port);
-                free(req->message);
-                free(req->to);
-                free(req);
-                return;
-            }
+            HANDLE_NULL_ALLOC(dial(atoi(port), ip, &fd), cleanup_req_ip_port_kvp);
+            cache_connection(key, fd, &kvp,p2p->map);
         };
         socket_fd = *((int*)kvp->value);
+        free(kvp);
+        kvp = NULL;
         err = write(socket_fd, msg_size, 4);
         if(err<0){
             count_retries++;
@@ -319,18 +317,16 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
         };
         break;
     };
-    free(req->message);
-    free(req->to);
-    free(req);
-    free(ip);
-    free(port);
-    free(kvp);
+    HANDLE_NULL_ALLOC(NULL, cleanup_req_ip_port_kvp);
     return;
 
-    cleanup_key_or_msg:
-        if(message) free(message);
-        if(key)     free(key);
-        if(req)     free(req);
+    cleanup_req_ip_port_kvp:
+        if(req && req->message) free(req->message);
+        if(req && req->to)      free(req->to);
+        if(req)                 free(req);
+        if(ip)                  free(ip);
+        if(port)                free(port);
+        if(kvp)                 free(kvp);
         return;
 
 };
@@ -343,22 +339,21 @@ handle_write_error(int fd, const char* key, SimpleMap* map){
     free(rmv_pair.value);
     return;
 };
-char
+void
 cache_connection(const char*   key,
-                int**          fd,
-                const char*    port,
-                const char*    ip,
+                int*           fd,
                 KeyValuePair** kvp,
                 SimpleMap*     sm){
-    if(!dial(atoi(port), ip, fd)){
-        return 0;
-    };
+    if(!key || *fd<0 || !sm){
+        fd = NULL;
+        return;
+    }
     char* key_cpy = (char*)calloc(strlen(key)+1,sizeof(char));
     strcpy(key_cpy,key);
-    *kvp = create_key_val_pair((void*)key_cpy,(void*)*fd);
+    *kvp = create_key_val_pair((void*)key_cpy,fd);
     set(sm,*kvp,compare_keys);
-    *fd=NULL;
-    return 1;
+    fd = NULL;
+    return;
 };
 const void*
 compare_keys(const void* key_a, const void* key_b){
