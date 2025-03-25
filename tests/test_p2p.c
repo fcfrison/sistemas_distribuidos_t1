@@ -203,10 +203,11 @@ void test_port_with_spaces() {
     printf("Test 6 Passed: Port with leading/trailing spaces\n");
 }
 // Test 1: Valid client-server interaction
+// This test need to be update
 void test_valid_client_server_interaction(){
     int sockfd[2];//[0]-server [1]-client
     assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sockfd) == 0);//using AF_UNIX is a good call
-    PP2PLink* p2p = new_p2p_link(1);
+    PP2PLink* p2p = __new_p2p_link(1);
     pthread_t thread;
     ListenSockArgs* args = init_listen_sock_args(sockfd[0], p2p);
     assert(pthread_create(&thread, NULL, listen_to_clt, args) == 0);
@@ -456,9 +457,33 @@ void test_null_key() {
     free(sm);
     printf("Test 2 Passed: NULL key\n");
 };
-
+void
+test_send_sucessfull(void){
+    ListenerArgs* l_args =calloc(1,sizeof(ListenerArgs));
+    PP2PLink* p2p_listener = __new_p2p_link(1);
+    l_args->maxpending = 50;
+    l_args->p2p        = p2p_listener;
+    l_args->port       = "9000";
+    pthread_t* listener_th = (pthread_t*)calloc(1,sizeof(pthread_t));
+    if(pthread_create(listener_th, NULL, Listener, l_args)!=0){
+        free(listener_th);
+        fprintf(stderr, "Error: failed to create thread\n");
+        exit(EXIT_FAILURE);
+    };
+    PP2PLink* p2p_sender = __new_p2p_link(1);
+    char* __to = "127.0.0.1:9000";
+    char* __message = "Hello world!!";
+    char* to = (char*)calloc(strlen(__to),sizeof(char));
+    char* message = (char*)calloc(strlen(__message),sizeof(char));
+    strcpy(to,__to);
+    strcpy(message,__message);
+    PP2PLink_Req_Message* req = init_p2p_req(to, message);
+    Send(req, p2p_sender);
+    sleep(2);
+    puts("Test Passed: send sucessfull key\n");
+};
 int main() {
-    test_valid_positive_number();
+test_valid_positive_number();
     test_valid_negative_number();
     test_invalid_input_non_digit();
     test_invalid_input_empty_string();
@@ -474,29 +499,30 @@ int main() {
     test_both_ip_and_port_empty();
     test_ip_with_spaces();
     test_port_with_spaces();
-
-
+    
+    
     test_valid_client_server_interaction();
     printf("All tests passed!\n");
-
+    
     test_successful_connection();
     test_invalid_address();
     test_invalid_port();
-
+    
     test_valid_ip_port_extraction();
     test_missing_port();
     test_missing_ip();
     test_empty_input_string();
     test_custom_delimiter();
-
+    
     test_keys_are_equal();
     test_keys_are_not_equal();
     test_one_key_is_null();
     test_both_keys_are_null();
     test_empty_strings_as_keys();
     test_one_key_is_empty_string();
-
+    
     test_successful_caching();
     test_null_key();
+    test_send_sucessfull();
     return 0;
 }

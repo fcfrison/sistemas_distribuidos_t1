@@ -13,6 +13,7 @@
 #include <netdb.h>
 #include <time.h>
 #include <sys/time.h>
+#include <signal.h>
 #include "../include/chan.h"
 #include "../include/simple_map.h"
 #include "../include/errors.h"
@@ -23,7 +24,7 @@
     }
 
 PP2PLink*
-new_p2p_link(unsigned int max_size){
+__new_p2p_link(unsigned int max_size){
     chan* ind = start_chan(max_size, (void**)calloc(max_size, sizeof(PP2PLink_Ind_Message*)));
     if(!ind) return NULL;
     chan* req = start_chan(max_size, (void**)calloc(max_size, sizeof(PP2PLink_Req_Message*)));
@@ -34,9 +35,14 @@ new_p2p_link(unsigned int max_size){
     p2p->ind = ind;
     p2p->req = req;
     p2p->map = map;
-    //start();
     return p2p;
 };
+PP2PLink*
+new_p2p_link(unsigned int max_size, char* address){
+    PP2PLink* p2p = __new_p2p_link(max_size);
+    start(p2p,address);
+    return p2p;
+}
 int
 get_server_sock(char* service, int maxpending) {
     if(maxpending<1){
@@ -137,11 +143,13 @@ listen_to_clt(void* args){
         };
         int msg_len = from_str_to_int(msg_msg_size);
         if(msg_len<1){
+            close(fd);
             fprintf(stderr,"Error: invalid message length.");
             return NULL;
         };
         char* buf_msg = (char*)calloc(msg_len+1,sizeof(char));
         rtn = recv(fd, buf_msg, msg_len,MSG_WAITALL);
+        printf("Message received: %s\n",buf_msg);
         if(rtn<0){
             free(buf_msg);
             free(_args);
@@ -221,6 +229,14 @@ Sender(void* args){
         Send(req, p2p);
     };
 }
+PP2PLink_Req_Message*
+init_p2p_req(char* to, char* message){
+    PP2PLink_Req_Message* req = (PP2PLink_Req_Message*)calloc(1,sizeof(PP2PLink_Req_Message));
+    if(!req) return NULL;
+    req->message = message;
+    req->to      = to;
+    return req;
+}
 void*
 Listener(void* l_args){
     ListenerArgs* lstn_args = (void*)l_args;
@@ -238,6 +254,7 @@ Listener(void* l_args){
         if(client_fd==-1){
             continue;
         };
+        printf("Message: new connection from %d\n",client_fd);
         pthread_t* conn_thread = (pthread_t*)calloc(1,sizeof(pthread_t));
         if(!conn_thread){
             close(client_fd);
@@ -271,15 +288,15 @@ init_listen_sock_args(int client_fd, PP2PLink* p2p){
     return args;
 }
 
-//TODO: write test for the "Send" function
+
 void
 Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     int*  fd   = NULL;
     char* ip   = NULL; 
     char* port = NULL;
-    int socket_fd;
+    int   socket_fd;
     KeyValuePair* kvp = NULL;
-    unsigned int max_retries = 1, count_retries = -1;
+    int max_retries = 1, count_retries = -1;
     int err;
     if(!req){
         return;
@@ -294,8 +311,10 @@ Send(PP2PLink_Req_Message* req, PP2PLink* p2p){
     HANDLE_NULL_ALLOC(port, cleanup_req_ip_port_kvp);
     char msg_size[4] = {0};
     sprintf(msg_size, "%d", message_len);
+    // Ignore SIGPIPE signal globally
+    signal(SIGPIPE, SIG_IGN);
     while(count_retries<max_retries){
-        kvp = get(p2p->map,(void*)key, compare_keys);
+        kvp = get(p2p->map, key, compare_keys);
         if(!kvp){
             HANDLE_NULL_ALLOC(dial(atoi(port), ip, &fd), cleanup_req_ip_port_kvp);
             cache_connection(key, fd, &kvp,p2p->map);

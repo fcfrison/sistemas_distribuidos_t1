@@ -26,8 +26,8 @@ typedef struct{
     char* from;
     char* message;
 }PP2PLink_Ind_Message;
-
-PP2PLink* new_p2p_link(unsigned int max_size);
+PP2PLink* new_p2p_link(unsigned int max_size, char* address);
+PP2PLink* __new_p2p_link(unsigned int max_size);
 int       get_server_sock(char* service, int maxpending);
 int       accept_client(int server_fd);
 int       from_str_to_int(char* str);
@@ -37,6 +37,7 @@ PP2PLink_Ind_Message* init_p2p_ind(char* from, char* message);
 char*     format_rmt_add(const char* ip_str, const char* port_str);
 void      start(PP2PLink* p2p, char* address);
 void*     Sender(void* args);
+PP2PLink_Req_Message* init_p2p_req(char* to, char* message);
 void*     Listener(void* args);
 ListenSockArgs* init_listen_sock_args(int client_fd, PP2PLink* p2p);
 void      Send(PP2PLink_Req_Message* req, PP2PLink* p2p);
