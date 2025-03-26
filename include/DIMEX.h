@@ -1,5 +1,11 @@
 #include "../include/chan.h"
 #include "../include/p2plink.h"
+#define HANDLE_NULL_ALLOC(ptr, cleanup_label) \
+    if (!(ptr)) { \
+        goto cleanup_label; \
+    }
+#define FREE_MEMORY(ptr, cleanup_label) \
+    goto cleanup_label; 
 
 typedef enum{
     noMX   = 0,
