@@ -9,13 +9,14 @@ SRC      := src
 INCLUDE  := include
 TESTS    := tests
 PP2PLINK := PP2PLink
+DIMEX    := DIMEX
 # Libraries and executable name
 EXECUTABLE := server
 TEST_EXECUTABLE := tests
 
 # Source files
-SRC_FILES := $(wildcard $(SRC)/*.c) $(wildcard $(SRC)/$(PP2PLINK)/*.c)
-TEST_FILES := $(TESTS)/test_p2p.c
+SRC_FILES := $(wildcard $(SRC)/*.c) $(wildcard $(SRC)/$(PP2PLINK)/*.c) $(wildcard $(SRC)/$(DIMEX)/*.c)
+TEST_FILES := $(TESTS)/test_dimex.c
 
 # Main target
 all: $(BIN)/$(EXECUTABLE)

@@ -36,4 +36,7 @@ typedef struct{
     PP2PLink*    p2p;
     sem_t*       global_mutex;
 }DIMEX_Module;
+DIMEX_Module* new_dimex(char** addresses, unsigned char addresses_len, int id);
+void format_req_entry_message(char** fmt_msg, char* entry_msg, char* sep, int id, int req_ts);
+void format_req_exit_message(char**fmt_msg, char* src_msg, char* sep, int id );
 

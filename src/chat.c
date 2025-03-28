@@ -18,7 +18,7 @@ receiver(void* _p2p){
      return NULL;
  }
  
- int main(void){
+ int __main(void){
      char* address = "8051";
      char* server = calloc(strlen(address),sizeof(char));
      strcpy(server,address);
